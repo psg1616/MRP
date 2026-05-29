@@ -1,12 +1,11 @@
-"""
-===========================================
-자재 소요 계획(MRP) 자동 계산기
+자재 소요 계획(MRP) 자동 계산기 (개선판)
 ===========================================
 SAP에서 엑셀 뽑아서 이 스크립트 돌리면
 발주 수량, 발주 시점, 불량 보정까지 자동 계산
 """
 
 import pandas as pd
+import math  # 올림 처리를 위해 추가
 from datetime import datetime, timedelta
 
 # ============================================
@@ -63,7 +62,6 @@ items = [
     },
 ]
 
-
 # ============================================
 # 2. MRP 계산 함수
 # ============================================
@@ -93,23 +91,17 @@ def calculate_mrp(item, production_date):
             "여유재고": abs(net_requirement),
         }
 
-    # 불량률 보정: 불량 감안해서 더 주문
+    # [개선 2번 적용] 불량률 보정: math.ceil을 사용하여 직관적인 올림 처리
     defect_rate = item["불량률(%)"] / 100
-    adjusted_qty = int(net_requirement / (1 - defect_rate)) + 1
+    adjusted_qty = math.ceil(net_requirement / (1 - defect_rate))
 
-    # MOQ 적용: 최소주문수량보다 적으면 올림
+    # [개선 2번 적용] MOQ 적용: math.ceil을 활용하여 MOQ의 배수로 올림
     moq = item["최소주문수량(MOQ)"]
-    if adjusted_qty <= moq:
-        order_qty = moq
-    else:
-        # MOQ의 배수로 올림
-        order_qty = ((adjusted_qty + moq - 1) // moq) * moq
+    order_qty = math.ceil(adjusted_qty / moq) * moq
 
-    # 발주 기한: 생산일 - 리드타임
+    # [개선 3번 적용] 발주 기한 및 남은 일수 계산 시 시간(Time) 오차 제거 (.date() 활용)
     order_deadline = production_date - timedelta(days=item["리드타임(일)"])
-
-    # 오늘 기준 남은 일수
-    today = datetime.now()
+    today = datetime.now().date()
     days_left = (order_deadline - today).days
 
     # 긴급도 판단
@@ -142,14 +134,13 @@ def calculate_mrp(item, production_date):
         "남은일수": f"{days_left}일",
     }
 
-
 # ============================================
 # 3. 실행
 # ============================================
 if __name__ == "__main__":
 
-    # 생산 예정일 설정 (여기만 바꾸면 됨)
-    production_date = datetime.now() + timedelta(days=30)
+    # [개선 3번 적용] 생산 예정일을 날짜(Date) 타입으로 명확히 설정
+    production_date = datetime.now().date() + timedelta(days=30)
 
     print("=" * 60)
     print(f"  자재 소요 계획(MRP) 계산 결과")
@@ -187,7 +178,6 @@ if __name__ == "__main__":
     # ============================================
     # 4. 엑셀 파일로 자동 저장 (선택)
     # ============================================
-    # pandas가 설치되어 있으면 엑셀로도 내보내기 가능
     try:
         df = pd.DataFrame(results)
         filename = f"MRP_결과_{datetime.now().strftime('%Y%m%d')}.xlsx"
