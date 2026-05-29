@@ -1,0 +1,198 @@
+"""
+===========================================
+자재 소요 계획(MRP) 자동 계산기
+===========================================
+SAP에서 엑셀 뽑아서 이 스크립트 돌리면
+발주 수량, 발주 시점, 불량 보정까지 자동 계산
+"""
+
+import pandas as pd
+from datetime import datetime, timedelta
+
+# ============================================
+# 1. 품목 기본 정보 (여기만 수정하면 됨)
+# ============================================
+items = [
+    {
+        "품목코드": "A-001",
+        "품목명": "RF 커넥터",
+        "생산필요수량": 1000,
+        "현재고": 300,
+        "안전재고": 200,
+        "최소주문수량(MOQ)": 500,
+        "리드타임(일)": 14,
+        "불량률(%)": 3.0,
+        "단가(원)": 1500,
+        "업체명": "업체A",
+    },
+    {
+        "품목코드": "B-002",
+        "품목명": "PCB 기판",
+        "생산필요수량": 500,
+        "현재고": 450,
+        "안전재고": 100,
+        "최소주문수량(MOQ)": 200,
+        "리드타임(일)": 21,
+        "불량률(%)": 1.5,
+        "단가(원)": 8000,
+        "업체명": "업체B",
+    },
+    {
+        "품목코드": "C-003",
+        "품목명": "안테나 부품",
+        "생산필요수량": 2000,
+        "현재고": 1800,
+        "안전재고": 300,
+        "최소주문수량(MOQ)": 1000,
+        "리드타임(일)": 7,
+        "불량률(%)": 5.0,
+        "단가(원)": 500,
+        "업체명": "업체C",
+    },
+    {
+        "품목코드": "D-004",
+        "품목명": "하우징 케이스",
+        "생산필요수량": 800,
+        "현재고": 900,
+        "안전재고": 100,
+        "최소주문수량(MOQ)": 300,
+        "리드타임(일)": 10,
+        "불량률(%)": 2.0,
+        "단가(원)": 3000,
+        "업체명": "업체D",
+    },
+]
+
+
+# ============================================
+# 2. MRP 계산 함수
+# ============================================
+def calculate_mrp(item, production_date):
+    """품목 하나에 대한 MRP 계산"""
+
+    # 순소요량 = 생산필요수량 + 안전재고 - 현재고
+    net_requirement = (
+        item["생산필요수량"] + item["안전재고"] - item["현재고"]
+    )
+
+    # 순소요량이 0 이하면 발주 불필요
+    if net_requirement <= 0:
+        return {
+            "품목코드": item["품목코드"],
+            "품목명": item["품목명"],
+            "업체명": item["업체명"],
+            "생산필요수량": item["생산필요수량"],
+            "현재고": item["현재고"],
+            "안전재고": item["안전재고"],
+            "순소요량": 0,
+            "불량보정수량": 0,
+            "MOQ적용_발주수량": 0,
+            "발주금액(원)": 0,
+            "발주필요여부": "❌ 불필요",
+            "발주기한": "-",
+            "여유재고": abs(net_requirement),
+        }
+
+    # 불량률 보정: 불량 감안해서 더 주문
+    defect_rate = item["불량률(%)"] / 100
+    adjusted_qty = int(net_requirement / (1 - defect_rate)) + 1
+
+    # MOQ 적용: 최소주문수량보다 적으면 올림
+    moq = item["최소주문수량(MOQ)"]
+    if adjusted_qty <= moq:
+        order_qty = moq
+    else:
+        # MOQ의 배수로 올림
+        order_qty = ((adjusted_qty + moq - 1) // moq) * moq
+
+    # 발주 기한: 생산일 - 리드타임
+    order_deadline = production_date - timedelta(days=item["리드타임(일)"])
+
+    # 오늘 기준 남은 일수
+    today = datetime.now()
+    days_left = (order_deadline - today).days
+
+    # 긴급도 판단
+    if days_left < 0:
+        urgency = "🚨 기한 초과!"
+    elif days_left <= 3:
+        urgency = "⚠️ 긴급"
+    elif days_left <= 7:
+        urgency = "📋 주의"
+    else:
+        urgency = "✅ 여유"
+
+    # 발주 금액
+    order_amount = order_qty * item["단가(원)"]
+
+    return {
+        "품목코드": item["품목코드"],
+        "품목명": item["품목명"],
+        "업체명": item["업체명"],
+        "생산필요수량": item["생산필요수량"],
+        "현재고": item["현재고"],
+        "안전재고": item["안전재고"],
+        "순소요량": net_requirement,
+        "불량보정수량": adjusted_qty,
+        "MOQ적용_발주수량": order_qty,
+        "발주금액(원)": f"{order_amount:,}",
+        "발주필요여부": "✅ 필요",
+        "발주기한": order_deadline.strftime("%Y-%m-%d"),
+        "긴급도": urgency,
+        "남은일수": f"{days_left}일",
+    }
+
+
+# ============================================
+# 3. 실행
+# ============================================
+if __name__ == "__main__":
+
+    # 생산 예정일 설정 (여기만 바꾸면 됨)
+    production_date = datetime.now() + timedelta(days=30)
+
+    print("=" * 60)
+    print(f"  자재 소요 계획(MRP) 계산 결과")
+    print(f"  생산예정일: {production_date.strftime('%Y-%m-%d')}")
+    print(f"  계산일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print("=" * 60)
+
+    results = []
+    total_order_amount = 0
+
+    for item in items:
+        result = calculate_mrp(item, production_date)
+        results.append(result)
+
+        print(f"\n📦 [{result['품목코드']}] {result['품목명']}")
+        print(f"   업체: {result['업체명']}")
+        print(f"   생산필요: {result['생산필요수량']}개 | 현재고: {result['현재고']}개 | 안전재고: {result['안전재고']}개")
+        print(f"   순소요량: {result['순소요량']}개")
+        print(f"   발주필요: {result['발주필요여부']}")
+
+        if result["발주필요여부"] == "✅ 필요":
+            print(f"   불량보정: {result['불량보정수량']}개 → MOQ적용: {result['MOQ적용_발주수량']}개")
+            print(f"   발주금액: {result['발주금액(원)']}원")
+            print(f"   발주기한: {result['발주기한']} ({result['긴급도']} {result['남은일수']})")
+            # 금액 합산
+            amount = int(result["발주금액(원)"].replace(",", ""))
+            total_order_amount += amount
+        else:
+            print(f"   여유재고: {result['여유재고']}개")
+
+    print("\n" + "=" * 60)
+    print(f"  💰 총 발주 예상 금액: {total_order_amount:,}원")
+    print("=" * 60)
+
+    # ============================================
+    # 4. 엑셀 파일로 자동 저장 (선택)
+    # ============================================
+    # pandas가 설치되어 있으면 엑셀로도 내보내기 가능
+    try:
+        df = pd.DataFrame(results)
+        filename = f"MRP_결과_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        df.to_excel(filename, index=False)
+        print(f"\n📊 엑셀 파일 저장 완료: {filename}")
+    except Exception as e:
+        print(f"\n(엑셀 저장 실패: {e})")
+        print("  → pip install openpyxl 설치 후 다시 시도하세요")
