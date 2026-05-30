@@ -1,67 +1,21 @@
 """
 ===========================================
-자재 소요 계획(MRP) 자동 계산기 (개선판)
+자재 소요 계획(MRP) 자동 계산기 (7일 버퍼 적용)
 ===========================================
-SAP에서 엑셀 뽑아서 이 스크립트 돌리면
-발주 수량, 발주 시점, 불량 보정까지 자동 계산
 """
 
 import pandas as pd
-import math  # 올림 처리를 위해 추가
+import math
 from datetime import datetime, timedelta
 
 # ============================================
-# 1. 품목 기본 정보 (여기만 수정하면 됨)
+# 1. 품목 기본 정보
 # ============================================
 items = [
-    {
-        "품목코드": "A-001",
-        "품목명": "RF 커넥터",
-        "생산필요수량": 1000,
-        "현재고": 300,
-        "안전재고": 200,
-        "최소주문수량(MOQ)": 500,
-        "리드타임(일)": 14,
-        "불량률(%)": 3.0,
-        "단가(원)": 1500,
-        "업체명": "업체A",
-    },
-    {
-        "품목코드": "B-002",
-        "품목명": "PCB 기판",
-        "생산필요수량": 500,
-        "현재고": 450,
-        "안전재고": 100,
-        "최소주문수량(MOQ)": 200,
-        "리드타임(일)": 21,
-        "불량률(%)": 1.5,
-        "단가(원)": 8000,
-        "업체명": "업체B",
-    },
-    {
-        "품목코드": "C-003",
-        "품목명": "안테나 부품",
-        "생산필요수량": 2000,
-        "현재고": 1800,
-        "안전재고": 300,
-        "최소주문수량(MOQ)": 1000,
-        "리드타임(일)": 7,
-        "불량률(%)": 5.0,
-        "단가(원)": 500,
-        "업체명": "업체C",
-    },
-    {
-        "품목코드": "D-004",
-        "품목명": "하우징 케이스",
-        "생산필요수량": 800,
-        "현재고": 900,
-        "안전재고": 100,
-        "최소주문수량(MOQ)": 300,
-        "리드타임(일)": 10,
-        "불량률(%)": 2.0,
-        "단가(원)": 3000,
-        "업체명": "업체D",
-    },
+    {"품목코드": "A-001", "품목명": "RF 커넥터", "생산필요수량": 1000, "현재고": 300, "안전재고": 200, "최소주문수량(MOQ)": 500, "리드타임(일)": 14, "불량률(%)": 3.0, "단가(원)": 1500, "업체명": "업체A"},
+    {"품목코드": "B-002", "품목명": "PCB 기판", "생산필요수량": 500, "현재고": 450, "안전재고": 100, "최소주문수량(MOQ)": 200, "리드타임(일)": 21, "불량률(%)": 1.5, "단가(원)": 8000, "업체명": "업체B"},
+    {"품목코드": "C-003", "품목명": "안테나 부품", "생산필요수량": 2000, "현재고": 1800, "안전재고": 300, "최소주문수량(MOQ)": 1000, "리드타임(일)": 7, "불량률(%)": 5.0, "단가(원)": 500, "업체명": "업체C"},
+    {"품목코드": "D-004", "품목명": "하우징 케이스", "생산필요수량": 800, "현재고": 900, "안전재고": 100, "최소주문수량(MOQ)": 300, "리드타임(일)": 10, "불량률(%)": 2.0, "단가(원)": 3000, "업체명": "업체D"},
 ]
 
 # ============================================
@@ -70,12 +24,8 @@ items = [
 def calculate_mrp(item, production_date):
     """품목 하나에 대한 MRP 계산"""
 
-    # 순소요량 = 생산필요수량 + 안전재고 - 현재고
-    net_requirement = (
-        item["생산필요수량"] + item["안전재고"] - item["현재고"]
-    )
+    net_requirement = item["생산필요수량"] + item["안전재고"] - item["현재고"]
 
-    # 순소요량이 0 이하면 발주 불필요
     if net_requirement <= 0:
         return {
             "품목코드": item["품목코드"],
@@ -93,16 +43,18 @@ def calculate_mrp(item, production_date):
             "여유재고": abs(net_requirement),
         }
 
-    # [개선 2번 적용] 불량률 보정: math.ceil을 사용하여 직관적인 올림 처리
     defect_rate = item["불량률(%)"] / 100
     adjusted_qty = math.ceil(net_requirement / (1 - defect_rate))
 
-    # [개선 2번 적용] MOQ 적용: math.ceil을 활용하여 MOQ의 배수로 올림
     moq = item["최소주문수량(MOQ)"]
     order_qty = math.ceil(adjusted_qty / moq) * moq
 
-    # [개선 3번 적용] 발주 기한 및 남은 일수 계산 시 시간(Time) 오차 제거 (.date() 활용)
-    order_deadline = production_date - timedelta(days=item["리드타임(일)"])
+    # ----------------------------------------------------
+    # ⭐ 여기에 작성하신 7일 버퍼 로직이 들어가야 합니다!
+    # ----------------------------------------------------
+    buffer_days = 7 
+    order_deadline = production_date - timedelta(days=(item["리드타임(일)"] + buffer_days))
+    
     today = datetime.now().date()
     days_left = (order_deadline - today).days
 
@@ -116,7 +68,6 @@ def calculate_mrp(item, production_date):
     else:
         urgency = "✅ 여유"
 
-    # 발주 금액
     order_amount = order_qty * item["단가(원)"]
 
     return {
@@ -137,19 +88,15 @@ def calculate_mrp(item, production_date):
     }
 
 # ============================================
-# 3. 실행
+# 3. 실행부
 # ============================================
 if __name__ == "__main__":
-
-# 납품받고 생산에 투입하기까지의 준비/여유 기간 (7일)
-buffer_days = 7 
-
-# 예상 납품일 = 생산 예정일 - 7일(버퍼)
-# 최종 발주 기한 = 예상 납품일 - 리드타임
-order_deadline = production_date - timedelta(days=(item["리드타임(일)"] + buffer_days))
+    
+    # 지워졌던 생산예정일 코드 복구
+    production_date = datetime.now().date() + timedelta(days=30)
 
     print("=" * 60)
-    print(f"  자재 소요 계획(MRP) 계산 결과")
+    print(f"  자재 소요 계획(MRP) 계산 결과 (입고 버퍼 7일 반영)")
     print(f"  생산예정일: {production_date.strftime('%Y-%m-%d')}")
     print(f"  계산일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 60)
@@ -171,7 +118,6 @@ order_deadline = production_date - timedelta(days=(item["리드타임(일)"] + b
             print(f"   불량보정: {result['불량보정수량']}개 → MOQ적용: {result['MOQ적용_발주수량']}개")
             print(f"   발주금액: {result['발주금액(원)']}원")
             print(f"   발주기한: {result['발주기한']} ({result['긴급도']} {result['남은일수']})")
-            # 금액 합산
             amount = int(result["발주금액(원)"].replace(",", ""))
             total_order_amount += amount
         else:
@@ -180,15 +126,3 @@ order_deadline = production_date - timedelta(days=(item["리드타임(일)"] + b
     print("\n" + "=" * 60)
     print(f"  💰 총 발주 예상 금액: {total_order_amount:,}원")
     print("=" * 60)
-
-    # ============================================
-    # 4. 엑셀 파일로 자동 저장 (선택)
-    # ============================================
-    try:
-        df = pd.DataFrame(results)
-        filename = f"MRP_결과_{datetime.now().strftime('%Y%m%d')}.xlsx"
-        df.to_excel(filename, index=False)
-        print(f"\n📊 엑셀 파일 저장 완료: {filename}")
-    except Exception as e:
-        print(f"\n(엑셀 저장 실패: {e})")
-        print("  → pip install openpyxl 설치 후 다시 시도하세요")
