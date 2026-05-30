@@ -1,27 +1,27 @@
 """
 ===========================================
-자재 소요 계획(MRP) 대화형 계산기
+자재 소요 계획(MRP) 대화형 계산기 (최종 실무판)
 ===========================================
-- 코드를 수정할 필요 없이 실행 후 값만 입력
-- 7일 입고 버퍼 로직 반영
+- 품목별로 다른 생산 예정일 및 입고 버퍼 개별 적용
 """
 
 import pandas as pd
 import math
 from datetime import datetime, timedelta
-import sys
 
 # ============================================
-# 1. MRP 계산 함수 (핵심 로직 유지)
+# 1. MRP 계산 함수
 # ============================================
-def calculate_mrp(item, production_date):
-    """품목 하나에 대한 MRP 계산"""
+def calculate_mrp(item):
+    """품목 하나에 대한 MRP 계산 (개별 일정 반영)"""
+    
     net_requirement = item["생산필요수량"] + item["안전재고"] - item["현재고"]
 
     if net_requirement <= 0:
         return {
             "품목코드": item["품목코드"],
             "품목명": item["품목명"],
+            "생산예정일": item["생산예정일"].strftime("%Y-%m-%d"),
             "업체명": item["업체명"],
             "생산필요수량": item["생산필요수량"],
             "현재고": item["현재고"],
@@ -41,8 +41,10 @@ def calculate_mrp(item, production_date):
     moq = item["최소주문수량(MOQ)"]
     order_qty = math.ceil(adjusted_qty / moq) * moq
 
-    # 7일 입고 버퍼 적용
-    buffer_days = 7 
+    # ⭐ 품목별로 입력받은 개별 버퍼와 생산일 적용
+    buffer_days = item["입고버퍼(일)"]
+    production_date = item["생산예정일"]
+    
     order_deadline = production_date - timedelta(days=(item["리드타임(일)"] + buffer_days))
     
     today = datetime.now().date()
@@ -63,6 +65,7 @@ def calculate_mrp(item, production_date):
     return {
         "품목코드": item["품목코드"],
         "품목명": item["품목명"],
+        "생산예정일": production_date.strftime("%Y-%m-%d"),
         "업체명": item["업체명"],
         "생산필요수량": item["생산필요수량"],
         "현재고": item["현재고"],
@@ -82,54 +85,51 @@ def calculate_mrp(item, production_date):
 # ============================================
 if __name__ == "__main__":
     print("=" * 60)
-    print(" 📊 자재 소요 계획(MRP) 대화형 계산기")
+    print(" 📊 자재 소요 계획(MRP) 개별 맞춤형 계산기")
     print("=" * 60)
-
-    # --- [1] 생산 예정일 입력받기 ---
-    while True:
-        try:
-            date_str = input("\n▶ 생산 예정일을 입력하세요 (예: 2026-06-30): ").strip()
-            production_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-            break
-        except ValueError:
-            print("  ❌ 오류: 날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식으로 다시 입력해주세요.")
 
     items = []
     
-    # --- [2] 품목 데이터 반복 입력받기 ---
+    # --- 품목 데이터 개별 입력받기 ---
     while True:
-        print("\n" + "-" * 40)
+        print("\n" + "-" * 50)
         print(" 📦 [새로운 품목 정보 입력]")
-        print("-" * 40)
+        print("-" * 50)
         
         try:
+            # 날짜 입력을 먼저 별도로 처리 (형식 오류 방지)
+            date_str = input(" 1. 생산 예정일 (예: 2026-06-30): ").strip()
+            prod_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            
             item = {
-                "품목코드": input(" 1. 품목코드 (예: A-001): ").strip(),
-                "품목명": input(" 2. 품목명 (예: RF 커넥터): ").strip(),
-                "생산필요수량": int(input(" 3. 생산필요수량 (개): ")),
-                "현재고": int(input(" 4. 현재고 (개): ")),
-                "안전재고": int(input(" 5. 안전재고 (개): ")),
-                "최소주문수량(MOQ)": int(input(" 6. 최소주문수량(MOQ): ")),
-                "리드타임(일)": int(input(" 7. 리드타임(일): ")),
-                "불량률(%)": float(input(" 8. 불량률(%) (예: 3.0): ")),
-                "단가(원)": int(input(" 9. 단가(원): ")),
-                "업체명": input(" 10. 업체명: ").strip()
+                "생산예정일": prod_date,
+                "품목코드": input(" 2. 품목코드 (예: A-001): ").strip(),
+                "품목명": input(" 3. 품목명 (예: RF 커넥터): ").strip(),
+                "생산필요수량": int(input(" 4. 생산필요수량 (개): ")),
+                "현재고": int(input(" 5. 현재고 (개): ")),
+                "안전재고": int(input(" 6. 안전재고 (개): ")),
+                "최소주문수량(MOQ)": int(input(" 7. 최소주문수량(MOQ): ")),
+                "리드타임(일)": int(input(" 8. 납품 리드타임(일): ")),
+                "입고버퍼(일)": int(input(" 9. 입고 후 대기 버퍼(일): ")),
+                "불량률(%)": float(input(" 10. 불량률(%) (예: 3.0): ")),
+                "단가(원)": int(input(" 11. 단가(원): ")),
+                "업체명": input(" 12. 업체명: ").strip()
             }
             items.append(item)
             
         except ValueError:
-            print("\n  ❌ 오류: 수량, 리드타임, 단가 등에는 숫자만 입력해야 합니다. 처음부터 다시 입력해주세요.")
-            continue # 에러 나면 현재 품목 입력을 취소하고 다시 시작
+            print("\n  ❌ 오류: 날짜 형식(YYYY-MM-DD)이 틀렸거나 숫자가 아닌 값을 입력했습니다.")
+            print("  이 품목의 입력을 처음부터 다시 진행합니다.")
+            continue 
 
         # 추가 입력 여부 확인
         more = input("\n▶ 다른 품목을 추가로 입력하시겠습니까? (y / n): ").strip().lower()
         if more != 'y':
             break
 
-    # --- [3] 결과 계산 및 출력 ---
+    # --- 결과 계산 및 출력 ---
     print("\n\n" + "=" * 60)
-    print(f"  자재 소요 계획(MRP) 계산 결과 (입고 버퍼 7일 반영)")
-    print(f"  생산예정일: {production_date.strftime('%Y-%m-%d')}")
+    print(f"  자재 소요 계획(MRP) 개별 계산 결과")
     print(f"  계산일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 60)
 
@@ -137,11 +137,11 @@ if __name__ == "__main__":
     total_order_amount = 0
 
     for item in items:
-        result = calculate_mrp(item, production_date)
+        result = calculate_mrp(item) # 품목 정보 안에 날짜가 있으므로 인자를 하나만 넘김
         results.append(result)
 
         print(f"\n📦 [{result['품목코드']}] {result['품목명']}")
-        print(f"   업체: {result['업체명']}")
+        print(f"   업체: {result['업체명']} | 생산예정일: {result['생산예정일']}")
         print(f"   생산필요: {result['생산필요수량']}개 | 현재고: {result['현재고']}개 | 안전재고: {result['안전재고']}개")
         print(f"   순소요량: {result['순소요량']}개")
         print(f"   발주필요: {result['발주필요여부']}")
@@ -159,7 +159,7 @@ if __name__ == "__main__":
     print(f"  💰 총 발주 예상 금액: {total_order_amount:,}원")
     print("=" * 60)
 
-    # --- [4] 엑셀 자동 저장 ---
+    # --- 엑셀 자동 저장 ---
     try:
         df = pd.DataFrame(results)
         filename = f"MRP_결과_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
