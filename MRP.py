@@ -1,29 +1,21 @@
 """
 ===========================================
-자재 소요 계획(MRP) 자동 계산기 (7일 버퍼 적용)
+자재 소요 계획(MRP) 대화형 계산기
 ===========================================
+- 코드를 수정할 필요 없이 실행 후 값만 입력
+- 7일 입고 버퍼 로직 반영
 """
 
 import pandas as pd
 import math
 from datetime import datetime, timedelta
+import sys
 
 # ============================================
-# 1. 품목 기본 정보
-# ============================================
-items = [
-    {"품목코드": "A-001", "품목명": "RF 커넥터", "생산필요수량": 1000, "현재고": 300, "안전재고": 200, "최소주문수량(MOQ)": 500, "리드타임(일)": 14, "불량률(%)": 3.0, "단가(원)": 1500, "업체명": "업체A"},
-    {"품목코드": "B-002", "품목명": "PCB 기판", "생산필요수량": 500, "현재고": 450, "안전재고": 100, "최소주문수량(MOQ)": 200, "리드타임(일)": 21, "불량률(%)": 1.5, "단가(원)": 8000, "업체명": "업체B"},
-    {"품목코드": "C-003", "품목명": "안테나 부품", "생산필요수량": 2000, "현재고": 1800, "안전재고": 300, "최소주문수량(MOQ)": 1000, "리드타임(일)": 7, "불량률(%)": 5.0, "단가(원)": 500, "업체명": "업체C"},
-    {"품목코드": "D-004", "품목명": "하우징 케이스", "생산필요수량": 800, "현재고": 900, "안전재고": 100, "최소주문수량(MOQ)": 300, "리드타임(일)": 10, "불량률(%)": 2.0, "단가(원)": 3000, "업체명": "업체D"},
-]
-
-# ============================================
-# 2. MRP 계산 함수
+# 1. MRP 계산 함수 (핵심 로직 유지)
 # ============================================
 def calculate_mrp(item, production_date):
     """품목 하나에 대한 MRP 계산"""
-
     net_requirement = item["생산필요수량"] + item["안전재고"] - item["현재고"]
 
     if net_requirement <= 0:
@@ -49,9 +41,7 @@ def calculate_mrp(item, production_date):
     moq = item["최소주문수량(MOQ)"]
     order_qty = math.ceil(adjusted_qty / moq) * moq
 
-    # ----------------------------------------------------
-    # ⭐ 여기에 작성하신 7일 버퍼 로직이 들어가야 합니다!
-    # ----------------------------------------------------
+    # 7일 입고 버퍼 적용
     buffer_days = 7 
     order_deadline = production_date - timedelta(days=(item["리드타임(일)"] + buffer_days))
     
@@ -88,14 +78,56 @@ def calculate_mrp(item, production_date):
     }
 
 # ============================================
-# 3. 실행부
+# 2. 메인 실행부 (사용자 입력 로직)
 # ============================================
 if __name__ == "__main__":
-    
-    # 지워졌던 생산예정일 코드 복구
-    production_date = datetime.now().date() + timedelta(days=30)
-
     print("=" * 60)
+    print(" 📊 자재 소요 계획(MRP) 대화형 계산기")
+    print("=" * 60)
+
+    # --- [1] 생산 예정일 입력받기 ---
+    while True:
+        try:
+            date_str = input("\n▶ 생산 예정일을 입력하세요 (예: 2026-06-30): ").strip()
+            production_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            break
+        except ValueError:
+            print("  ❌ 오류: 날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식으로 다시 입력해주세요.")
+
+    items = []
+    
+    # --- [2] 품목 데이터 반복 입력받기 ---
+    while True:
+        print("\n" + "-" * 40)
+        print(" 📦 [새로운 품목 정보 입력]")
+        print("-" * 40)
+        
+        try:
+            item = {
+                "품목코드": input(" 1. 품목코드 (예: A-001): ").strip(),
+                "품목명": input(" 2. 품목명 (예: RF 커넥터): ").strip(),
+                "생산필요수량": int(input(" 3. 생산필요수량 (개): ")),
+                "현재고": int(input(" 4. 현재고 (개): ")),
+                "안전재고": int(input(" 5. 안전재고 (개): ")),
+                "최소주문수량(MOQ)": int(input(" 6. 최소주문수량(MOQ): ")),
+                "리드타임(일)": int(input(" 7. 리드타임(일): ")),
+                "불량률(%)": float(input(" 8. 불량률(%) (예: 3.0): ")),
+                "단가(원)": int(input(" 9. 단가(원): ")),
+                "업체명": input(" 10. 업체명: ").strip()
+            }
+            items.append(item)
+            
+        except ValueError:
+            print("\n  ❌ 오류: 수량, 리드타임, 단가 등에는 숫자만 입력해야 합니다. 처음부터 다시 입력해주세요.")
+            continue # 에러 나면 현재 품목 입력을 취소하고 다시 시작
+
+        # 추가 입력 여부 확인
+        more = input("\n▶ 다른 품목을 추가로 입력하시겠습니까? (y / n): ").strip().lower()
+        if more != 'y':
+            break
+
+    # --- [3] 결과 계산 및 출력 ---
+    print("\n\n" + "=" * 60)
     print(f"  자재 소요 계획(MRP) 계산 결과 (입고 버퍼 7일 반영)")
     print(f"  생산예정일: {production_date.strftime('%Y-%m-%d')}")
     print(f"  계산일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -126,3 +158,12 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print(f"  💰 총 발주 예상 금액: {total_order_amount:,}원")
     print("=" * 60)
+
+    # --- [4] 엑셀 자동 저장 ---
+    try:
+        df = pd.DataFrame(results)
+        filename = f"MRP_결과_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        df.to_excel(filename, index=False)
+        print(f"\n📊 엑셀 파일 저장 완료: {filename}\n")
+    except Exception as e:
+        pass
