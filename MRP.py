@@ -141,8 +141,12 @@ def calculate_mrp(item, production_date):
 # ============================================
 if __name__ == "__main__":
 
-    # [개선 3번 적용] 생산 예정일을 날짜(Date) 타입으로 명확히 설정
-    production_date = datetime.now().date() + timedelta(days=30)
+# 납품받고 생산에 투입하기까지의 준비/여유 기간 (7일)
+buffer_days = 7 
+
+# 예상 납품일 = 생산 예정일 - 7일(버퍼)
+# 최종 발주 기한 = 예상 납품일 - 리드타임
+order_deadline = production_date - timedelta(days=(item["리드타임(일)"] + buffer_days))
 
     print("=" * 60)
     print(f"  자재 소요 계획(MRP) 계산 결과")
