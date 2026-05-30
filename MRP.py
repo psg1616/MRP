@@ -3,6 +3,7 @@
 자재 소요 계획(MRP) 복사/붙여넣기 지원 계산기
 ===========================================
 - 엑셀 행을 그대로 복사해서 한 번에 입력 가능
+- 출력 시 최소주문수량(MOQ) 정보 포함
 """
 
 import pandas as pd
@@ -10,7 +11,7 @@ import math
 from datetime import datetime, timedelta
 
 # ============================================
-# 1. MRP 계산 함수 (기존 로직 동일)
+# 1. MRP 계산 함수
 # ============================================
 def calculate_mrp(item):
     net_requirement = item["생산필요수량"] + item["안전재고"] - item["현재고"]
@@ -19,7 +20,7 @@ def calculate_mrp(item):
         return {
             "품목코드": item["품목코드"], "품목명": item["품목명"], "생산예정일": item["생산예정일"].strftime("%Y-%m-%d"),
             "업체명": item["업체명"], "생산필요수량": item["생산필요수량"], "현재고": item["현재고"],
-            "안전재고": item["안전재고"], "순소요량": 0, "불량보정수량": 0, "MOQ적용_발주수량": 0,
+            "안전재고": item["안전재고"], "최소주문수량": item["최소주문수량(MOQ)"], "순소요량": 0, "불량보정수량": 0, "MOQ적용_발주수량": 0,
             "발주금액(원)": 0, "발주필요여부": "❌ 불필요", "발주기한": "-", "여유재고": abs(net_requirement),
         }
 
@@ -44,13 +45,13 @@ def calculate_mrp(item):
     return {
         "품목코드": item["품목코드"], "품목명": item["품목명"], "생산예정일": item["생산예정일"].strftime("%Y-%m-%d"),
         "업체명": item["업체명"], "생산필요수량": item["생산필요수량"], "현재고": item["현재고"],
-        "안전재고": item["안전재고"], "순소요량": net_requirement, "불량보정수량": adjusted_qty,
+        "안전재고": item["안전재고"], "최소주문수량": item["최소주문수량(MOQ)"], "순소요량": net_requirement, "불량보정수량": adjusted_qty,
         "MOQ적용_발주수량": order_qty, "발주금액(원)": f"{order_amount:,}", "발주필요여부": "✅ 필요",
         "발주기한": order_deadline.strftime("%Y-%m-%d"), "긴급도": urgency, "남은일수": f"{days_left}일",
     }
 
 # ============================================
-# 2. 메인 실행부 (한 줄 붙여넣기 로직)
+# 2. 메인 실행부
 # ============================================
 if __name__ == "__main__":
     print("=" * 70)
@@ -126,7 +127,8 @@ if __name__ == "__main__":
 
             print(f"\n📦 [{result['품목코드']}] {result['품목명']}")
             print(f"   업체: {result['업체명']} | 생산예정일: {result['생산예정일']}")
-            print(f"   생산필요: {result['생산필요수량']}개 | 현재고: {result['현재고']}개 | 안전재고: {result['안전재고']}개")
+            # 수정된 부분: 출력 3번째 줄에 최소주문수량 추가
+            print(f"   생산필요: {result['생산필요수량']}개 | 현재고: {result['현재고']}개 | 안전재고: {result['안전재고']}개 | 최소주문수량: {result['최소주문수량']}개")
             print(f"   순소요량: {result['순소요량']}개")
             print(f"   발주필요: {result['발주필요여부']}")
 
@@ -136,6 +138,8 @@ if __name__ == "__main__":
                 print(f"   발주기한: {result['발주기한']} ({result['긴급도']} {result['남은일수']})")
                 amount = int(result["발주금액(원)"].replace(",", ""))
                 total_order_amount += amount
+            else:
+                print(f"   여유재고: {result['여유재고']}개")
 
         print("\n" + "=" * 70)
         print(f"  💰 총 발주 예상 금액: {total_order_amount:,}원")
